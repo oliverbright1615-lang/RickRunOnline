@@ -1,34 +1,9 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http);
+const path = require('path'); // Add this at the very top
 
-// Render needs to pick the port automatically
-const PORT = process.env.PORT || 10000; 
+// Replace your old app.use line with this:
+app.use(express.static(path.join(__dirname, 'public')));
 
-app.use(express.static('public'));
-
-let players = {};
-
-io.on('connection', (socket) => {
-  players[socket.id] = { x: 100, y: 400 };
-  socket.emit('currentPlayers', players);
-  socket.broadcast.emit('newPlayer', { id: socket.id, player: players[socket.id] });
-
-  socket.on('playerMovement', (data) => {
-    if (players[socket.id]) {
-      players[socket.id].x = data.x;
-      players[socket.id].y = data.y;
-      socket.broadcast.emit('playerMoved', { id: socket.id, x: data.x, y: data.y });
-    }
-  });
-
-  socket.on('disconnect', () => {
-    delete players[socket.id];
-    io.emit('playerDisconnected', socket.id);
-  });
-});
-
-http.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
+// Add this "Safety Route" at the very bottom (above http.listen)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
