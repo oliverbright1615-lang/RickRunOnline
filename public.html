@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RickRun.com - Boost Mode</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #050505; display: flex; justify-content: center; align-items: center; height: 100vh; width: 100vw; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        #game-container { position: relative; box-shadow: 0 0 50px rgba(0,0,0,0.8); background: #4a7cfb; width: 100vw; height: 100vh; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; }
+        
+        /* ANNOUNCEMENT BAR STYLE */
+        #announcement-bar {
+            position: absolute;
+            top: -60px; /* Hidden by default */
+            left: 0;
+            width: 100%;
+            background: rgba(231, 76, 60, 0.9);
+            color: white;
+            padding: 15px 0;
+            text-align: center;
+            font-weight: bold;
+            font-size: 20px;
+            z-index: 2000;
+            transition: top 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 3px solid #fff;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        #announcement-bar.active { top: 0; }
+
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 32px; text-shadow: 2px 2px 0 #000; pointer-events: none; z-index: 5; display: flex; flex-direction: column; gap: 5px; }
+        .high-score-ui { font-size: 18px; color: #f1c40f; }
+        #admin-auth { position: absolute; bottom: 30px; right: 30px; display: flex; flex-direction: column; align-items: flex-end; gap: 15px; z-index: 20; }
+        #admin-status { color: #00ffcc; font-weight: bold; font-size: 18px; text-shadow: 1px 1px 0 #000; opacity: 0; transition: opacity 0.5s; }
+        #admin-input { background: rgba(0,0,0,0.85); border: 2px solid #00ffcc; color: #00ffcc; padding: 12px; width: 220px; font-family: 'Courier New', Courier, monospace; font-size: 18px; outline: none; border-radius: 8px; box-shadow: 0 0 15px rgba(0, 255, 204, 0.3); }
+        .draggable-panel { position: absolute; background: rgba(10, 10, 15, 0.95); padding: 20px; border-radius: 12px; z-index: 100; cursor: default; backdrop-filter: blur(12px); border: 1px solid rgba(0, 255, 204, 0.2); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .panel-header { font-weight: bold; margin-bottom: 15px; text-align: center; border-bottom: 2px solid #00ffcc; padding-bottom: 10px; cursor: move; font-size: 18px; color: #00ffcc; letter-spacing: 2px; text-transform: uppercase; }
+        #admin-panel { top: 20px; left: 20px; color: #00ffcc; display: none; width: 360px; max-height: 90vh; overflow-y: auto; }
+        .admin-section { border: 1px solid rgba(0, 255, 204, 0.15); padding: 12px; margin-bottom: 15px; border-radius: 6px; background: rgba(0,0,0,0.4); }
+        .section-title { font-size: 11px; text-transform: uppercase; margin-bottom: 10px; font-weight: bold; color: #ffffff; opacity: 0.8; letter-spacing: 1px; }
+        .admin-row { margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; }
+        input[type="range"] { width: 140px; accent-color: #00ffcc; }
+        input[type="number"], #announcement-input { width: 70px; background: #111; color: #00ffcc; border: 1px solid #00ffcc; padding: 4px; border-radius: 4px; }
+        #announcement-input { width: 100%; box-sizing: border-box; margin-bottom: 8px; font-family: inherit; }
+        input[type="color"] { background: none; border: 1px solid #333; cursor: pointer; height: 25px; width: 40px; padding: 0; }
+        #skin-panel { top: 20px; right: 20px; background: rgba(10, 10, 15, 0.9); color: #fff; font-size: 14px; width: 240px; max-height: 85vh; overflow-y: auto; }
+        .skin-group-label { font-size: 10px; color: #666; margin: 10px 0 5px 0; text-transform: uppercase; letter-spacing: 1px; }
+        .skin-btn { background: #1a1a1a; color: white; border: 1px solid #333; padding: 10px; width: 100%; cursor: pointer; font-family: inherit; font-size: 11px; margin-bottom: 5px; text-align: left; border-radius: 4px; transition: all 0.2s; }
+        .skin-btn:hover:not(.locked) { background: #2a2a2a; border-color: #444; }
+        .skin-btn.active { border-color: #00ffcc; color: #00ffcc; background: #0a1a15; }
+        .skin-btn.locked { opacity: 0.3; cursor: not-allowed; background: #050505; border-style: dashed; color: #444; }
+        .skin-btn.admin-only.unlocked { border-color: #00ffcc; border-style: solid; opacity: 1; cursor: pointer; }
+        .admin-action-btn { background: #00ffcc; color: #000; border: none; padding: 10px; width: 100%; font-family: inherit; font-weight: bold; cursor: pointer; margin-top: 5px; border-radius: 4px; font-size: 11px; text-transform: uppercase; transition: 0.2s; }
+        .admin-action-btn:hover { filter: brightness(1.2); }
+        .admin-action-btn:active { transform: scale(0.96); }
+        .btn-danger { background: #ff4d4d; color: white; }
+        #home-screen, #win-screen, #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; z-index: 1000; text-align: center; }
+        #overlay, #win-screen { display: none; }
+        .btn { background: #e74c3c; border: none; padding: 18px 45px; color: white; font-size: 24px; border-radius: 8px; cursor: pointer; margin-top: 25px; font-family: inherit; box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4); transition: transform 0.2s, background 0.2s; }
+        .btn:hover { transform: scale(1.05); background: #ff5e4d; }
+        @keyframes glitch { 0% { transform: translate(0); text-shadow: 2px 2px #ff00ff, -2px -2px #00ffff; } 20% { transform: translate(-2px, 2px); } 40% { transform: translate(-2px, -2px); text-shadow: -2px 2px #ff00ff, 2px -2px #00ffff; } 60% { transform: translate(2px, 2px); } 80% { transform: translate(2px, -2px); text-shadow: 2px -2px #ff00ff, -2px 2px #00ffff; } 100% { transform: translate(0); } }
+        .death-message { font-size: 3.5vw; color: #ff4d4d; font-weight: 900; margin: 20px; animation: glitch 0.3s infinite; text-transform: uppercase; max-width: 80%; line-height: 1.2; }
+        input[type="checkbox"] { width: 18px; height: 18px; accent-color: #00ffcc; cursor: pointer; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        ::-webkit-scrollbar-thumb { background: #00ffcc; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="announcement-bar">System Broadcast: <span id="announcement-text"></span></div>
+
+    <div id="ui">
+        <div>AURA x <span id="score">000000</span></div>
+        <div class="high-score-ui">BEST: <span id="high-score">000000</span></div>
+    </div>
+    
+    <div id="admin-auth">
+        <div id="admin-status">ADMIN CONSOLE ACTIVE</div>
+        <input type="text" id="admin-input" placeholder="ACCESS CODE..." autocomplete="off">
+    </div>
+
+    <div id="admin-panel" class="draggable-panel">
+        <div class="panel-header" id="admin-header">ADMIN CONSOLE</div>
+        
+        <div class="admin-section">
+            <div class="section-title">Server Broadcast</div>
+            <input type="text" id="announcement-input" placeholder="Message to all players...">
+            <button class="admin-action-btn" onclick="sendAnnouncement()">BROADCAST TO SCREEN</button>
+        </div>
+
+        <div class="admin-section">
+            <div class="section-title">Environment Theme</div>
+            <div class="admin-row">Sky Color: <input type="color" id="admin-sky-color" value="#4a7cfb"></div>
+            <div class="admin-row">Floor Color: <input type="color" id="admin-floor-color" value="#43a047"></div>
+        </div>
+
+        <div class="admin-section">
+            <div class="section-title">Core Physics</div>
+            <div class="admin-row">Run Speed: <input type="range" id="admin-speed-slider" min="5" max="150" value="30"></div>
+            <div class="admin-row">Jump Velocity: <input type="range" id="admin-jump-slider" min="8" max="50" value="16"></div>
+            <div class="admin-row">Entity Scale: <input type="range" id="admin-player-scale" min="0.2" max="5" step="0.1" value="1"></div>
+            <div class="admin-row">Invulnerability: <input type="checkbox" id="admin-god"></div>
+            <div class="admin-row">Zero Gravity: <input type="checkbox" id="admin-low-grav"></div>
+        </div>
+
+        <div class="admin-section">
+            <div class="section-title">Manifestation</div>
+            <div style="display: flex; gap: 8px;">
+                <button class="admin-action-btn" style="background: #a29bfe;" onclick="spawnClone()">CLONE SELF</button>
+                <button class="admin-action-btn" style="background: #fab1a0;" onclick="spawnTrampoline()">TRAMPOLINE</button>
+            </div>
+            <button class="admin-action-btn btn-danger" style="margin-top: 8px;" onclick="resetAllManifestations()">RESET ALL CLONES/PADS</button>
+            <div class="admin-row" style="margin-top: 10px;">Pad Force: <input type="range" id="trampoline-force" min="20" max="80" value="35"></div>
+        </div>
+
+        <div class="admin-section">
+            <div class="section-title">World State</div>
+            <div class="admin-row">Time Freeze: <input type="checkbox" id="admin-freeze"></div>
+            <div class="admin-row">Stealth Platforms: <input type="checkbox" id="admin-hide-plats"></div>
+            <div class="admin-row">Spectrum Mode: <input type="checkbox" id="admin-rainbow"></div>
+        </div>
+
+        <div class="admin-section">
+            <div class="section-title">Coordinate Control</div>
+            <div class="admin-row">
+                Plat ID: <input type="number" id="tp-plat-id" value="0" min="0">
+                <button class="admin-action-btn" style="width: 80px; margin: 0;" onclick="teleportToPlatform()">GOTO</button>
+            </div>
+            <div style="display: flex; gap: 5px;">
+                <button class="admin-action-btn" onclick="teleportToCoords(100, 400)">START</button>
+                <button class="admin-action-btn" style="background: #fdcb6e;" onclick="teleportToCoords(24500, 200)">FINISH</button>
+            </div>
+        </div>
+
+        <div class="admin-section">
+            <div class="section-title">Console Platform Editor</div>
+            <div class="admin-row">Selection ID: <input type="number" id="plat-id-input" value="0" min="0" oninput="updatePlatEditor()"></div>
+            <div class="admin-row">Altitude: <input type="range" id="plat-height-slider" min="0" max="1200" step="1" oninput="modifyPlatform()"></div>
+            <div class="admin-row">Horizontal: <input type="range" id="plat-x-slider" min="0" max="25000" step="1" oninput="modifyPlatform()"></div>
+            <button class="admin-action-btn" style="background: #0984e3; color: white;" onclick="spawnPlatformAtPlayer()">MANIFEST AT POSITION</button>
+        </div>
+
+        <div class="admin-section">
+            <div class="section-title">Visual Overrides</div>
+            <div class="admin-row">Stealth Mode: <input type="checkbox" id="admin-invis"></div>
+            <div class="admin-row">No Clipping: <input type="checkbox" id="admin-ghost"></div>
+            <div class="admin-row">Vertical Flight: <input type="checkbox" id="admin-fly"></div>
+            <div class="admin-row">Mid-Air Jump: <input type="checkbox" id="admin-mid-jump"></div>
+            <div class="admin-row">Kinetic Trail: <input type="checkbox" id="admin-trail"></div>
+        </div>
+    </div>
+
+    <div id="skin-panel" class="draggable-panel">
+        <div class="panel-header" id="skin-header">SKIN REPOSITORY</div>
+        <div class="skin-group-label">Standard</div>
+        <button class="skin-btn active" id="skin-classic" onclick="setSkin('classic')">CLASSIC RICK</button>
+        <button class="skin-btn" id="skin-blue" onclick="setSkin('blue')">BLUE SUIT</button>
+        <button class="skin-btn" id="skin-gold" onclick="setSkin('goldvibe')">GOLD VIBE</button>
+        <div class="skin-group-label">Console Restricted</div>
+        <button class="skin-btn locked admin-only" id="skin-neon" onclick="setSkin('neon')">NEON PHASE</button>
+        <button class="skin-btn locked admin-only" id="skin-void" onclick="setSkin('void')">VOID WALKER</button>
+        <button class="skin-btn locked admin-only" id="skin-glitch" onclick="setSkin('glitch')">GLITCH.SYS</button>
+        <button class="skin-btn locked admin-only" id="skin-matrix" onclick="setSkin('matrix')">THE SOURCE</button>
+        <button class="skin-btn locked admin-only" id="skin-nebula" onclick="setSkin('nebula')">NEBULA DUST</button>
+        <button class="skin-btn locked admin-only" id="skin-supernova" onclick="setSkin('supernova')">SUPERNOVA</button>
+        <button class="skin-btn locked admin-only" id="skin-dev" onclick="setSkin('dev')">MASTER CONSOLE</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="home-screen">
+        <h1 style="font-size: 8vw; margin: 0; text-shadow: 0 0 30px #e74c3c;">RICK RUNNER</h1>
+        <p style="color: #4a7cfb; font-size: 1.5vw; letter-spacing: 4px; text-transform: uppercase;">The Marathon of Legends</p>
+        <button class="btn" onclick="startGame()">INITIATE RUN</button>
+    </div>
+
+    <div id="win-screen">
+        <h1 style="color: #f1c40f; font-size: 6vw;">MISSION ACCOMPLISHED</h1>
+        <p>You have reached the terminus.</p>
+        <button class="btn" onclick="restartLevel()">RESET TIMELINE</button>
+    </div>
+
+    <div id="overlay">
+        <div class="death-message">I THOUGHT U WERE NEVER GONNA GIVE ME UP :(</div>
+        <p style="opacity: 0.6; margin-top: 0;">Timeline Terminated.</p>
+        <button class="btn" onclick="restartLevel()">REBOOT</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const highScoreEl = document.getElementById('high-score');
+    const adminPanel = document.getElementById('admin-panel');
+    const skinPanel = document.getElementById('skin-panel');
+    const adminInput = document.getElementById('admin-input');
+
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    const WORLD_WIDTH = 25000;
+    let gameState = 'menu';
+    let cameraX = 0;
+    let score = 0;
+    let highScore = localStorage.getItem('rickrun_highscore') || 0;
+    highScoreEl.innerText = highScore.toString().padStart(6, '0');
+
+    let adminUnlocked = false;
+    let boostActive = false; 
+    let showIds = false; 
+    let currentSkin = 'classic';
+    const keys = {};
+
+    const BASE_GRAVITY = 0.8;
+    const DEFAULT_JUMP = 16;
+    const DEFAULT_SPEED = 7.5;
+    const BASE_WIDTH = 36;
+    const BASE_HEIGHT = 48;
+
+    const skins = {
+        classic: { H: "#A0522D", S: "#FFDBAC", W: "#FFFFFF", J: "#444444", P: "#111111" },
+        blue: { H: "#4B0082", S: "#FFDBAC", W: "#ADD8E6", J: "#0000FF", P: "#000080" },
+        goldvibe: { H: "#d4af37", S: "#f0e68c", W: "#ffd700", J: "#daa520", P: "#b8860b" },
+        neon: { H: "#ff00ff", S: "#00ffff", W: "#ffff00", J: "#00ff00", P: "#00ff00" },
+        void: { H: "#000000", S: "#1a1a1a", W: "#000000", J: "#000000", P: "#000000" },
+        glitch: { H: "#55ff55", S: "#ff55ff", W: "#5555ff", J: "#ffff55", P: "#ff5555" },
+        matrix: { H: "#00FF00", S: "#003300", W: "#00FF00", J: "#001100", P: "#00FF00" },
+        nebula: { H: "#483d8b", S: "#9370db", W: "#ee82ee", J: "#8a2be2", P: "#4b0082" },
+        supernova: { H: "#ffffff", S: "#ff4500", W: "#ffd700", J: "#4b0082", P: "#ff1493" },
+        dev: { H: "#00ffcc", S: "#ffffff", W: "#00ffcc", J: "#000000", P: "#00ffcc" }
+    };
+
+    const player = {
+        x: 100, y: 400, width: BASE_WIDTH, height: BASE_HEIGHT,
+        vx: 0, vy: 0, grounded: false, facingRight: true, animFrame: 0,
+        trail: [], jumpDebounce: false
+    };
+
+    let platforms = [];
+    let clones = [];
+    let trampolines = [];
+    let flag = { x: WORLD_WIDTH - 250, y: 400, w: 40, h: 100 };
+
+    function makeDraggable(el, header) {
+        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+        header.onmousedown = (e) => {
+            pos3 = e.clientX; pos4 = e.clientY;
+            document.onmouseup = () => { document.onmouseup = null; document.onmousemove = null; };
+            document.onmousemove = (e) => {
+                pos1 = pos3 - e.clientX; pos2 = pos4 - e.clientY;
+                pos3 = e.clientX; pos4 = e.clientY;
+                el.style.top = (el.offsetTop - pos2) + "px";
+                el.style.left = (el.offsetLeft - pos1) + "px";
+            };
+        }
+    }
+    makeDraggable(adminPanel, document.getElementById('admin-header'));
+    makeDraggable(skinPanel, document.getElementById('skin-header'));
+
+    function generateLevel() {
+        platforms = [];
+        let idCounter = 0;
+        let currentY = canvas.height - 150;
+        platforms.push({ x: 0, y: currentY, w: 1000, h: 400, id: idCounter++ });
+        let curX = 1100;
+        const jumpDistance = DEFAULT_SPEED * ((DEFAULT_JUMP / BASE_GRAVITY) * 2);
+        while (curX < WORLD_WIDTH - 2500) {
+            let w = 200 + Math.random() * 400;
+            let gap = 150 + Math.random() * (jumpDistance * 0.85);
+            let targetY = currentY + (Math.random() - 0.5) * 200;
+            targetY = Math.max(canvas.height * 0.25, Math.min(canvas.height - 150, targetY));
+            platforms.push({ x: curX + gap, y: targetY, w, h: 40, id: idCounter++ });
+            curX = curX + gap + w;
+            currentY = targetY;
+        }
+        platforms.push({ x: WORLD_WIDTH - 2000, y: canvas.height - 150, w: 2000, h: 400, id: idCounter });
+        flag.y = platforms[platforms.length - 1].y - 100;
+        flag.x = WORLD_WIDTH - 300;
+        updateUIStats();
+    }
+
+    function spawnClone() { if (!adminUnlocked) return; clones.push({ x: player.x, y: player.y, width: player.width, height: player.height, vx: player.vx, vy: player.vy, facingRight: player.facingRight, skin: currentSkin }); }
+    function spawnTrampoline() { if (!adminUnlocked) return; trampolines.push({ x: player.x - 40, y: player.y + player.height - 10, w: 120, h: 20, force: parseInt(document.getElementById('trampoline-force').value) }); }
+    function resetAllManifestations() { if (!adminUnlocked) return; clones = []; trampolines = []; }
+
+    function spawnPlatformAtPlayer() {
+        if (!adminUnlocked) return;
+        const newId = platforms.length > 0 ? Math.max(...platforms.map(p => p.id)) + 1 : 0;
+        platforms.push({ x: player.x - (150 * (player.width/BASE_WIDTH)), y: player.y + player.height, w: 300, h: 40, id: newId });
+        updateUIStats();
+        document.getElementById('plat-id-input').value = newId;
+        updatePlatEditor();
+    }
+
+    function updateUIStats() {
+        const maxId = platforms.length > 0 ? Math.max(...platforms.map(p => p.id)) : 0;
+        document.getElementById('plat-id-input').max = maxId;
+        document.getElementById('tp-plat-id').max = maxId;
+    }
+
+    function updatePlatEditor() {
+        const id = parseInt(document.getElementById('plat-id-input').value);
+        const p = platforms.find(plat => plat.id === id);
+        if (p) { document.getElementById('plat-height-slider').value = p.y; document.getElementById('plat-x-slider').value = p.x; }
+    }
+
+    function modifyPlatform() {
+        const id = parseInt(document.getElementById('plat-id-input').value);
+        const newY = parseInt(document.getElementById('plat-height-slider').value);
+        const newX = parseInt(document.getElementById('plat-x-slider').value);
+        const p = platforms.find(plat => plat.id === id);
+        if (p) { p.y = newY; p.x = newX; if (id === platforms.length - 1) flag.y = p.y - 100; }
+    }
+
+    function teleportToPlatform() {
+        const id = parseInt(document.getElementById('tp-plat-id').value);
+        const p = platforms.find(plat => plat.id === id);
+        if (p) { teleportToCoords(p.x + (p.w / 2), p.y - player.height - 10); }
+    }
+
+    function teleportToCoords(x, y) { player.x = x; player.y = y; player.vx = 0; player.vy = 0; cameraX = player.x - (canvas.width / 2); }
+
+    // BROADCAST FUNCTION
+    function sendAnnouncement() {
+        const input = document.getElementById('announcement-input');
+        const bar = document.getElementById('announcement-bar');
+        const text = document.getElementById('announcement-text');
+        
+        if (input.value.trim() !== "") {
+            text.innerText = input.value;
+            bar.classList.add('active');
+            
+            // Auto hide after 5 seconds
+            setTimeout(() => {
+                bar.classList.remove('active');
+            }, 5000);
+            
+            input.value = "";
+        }
+    }
+
+    adminInput.addEventListener('input', () => {
+        const val = adminInput.value.toUpperCase();
+        if (val === '16789') {
+            boostActive = true; 
+            document.getElementById('admin-status').innerText = "BOOST MODE ACTIVE";
+            document.getElementById('admin-status').style.opacity = 1;
+            adminInput.value = "";
+            adminInput.blur();
+        }
+        if (val === 'BASIL') {
+            adminUnlocked = true;
+            showIds = true;
+            adminPanel.style.display = 'block';
+            document.getElementById('admin-god').checked = true;
+            document.getElementById('admin-status').innerText = "ADMIN CONSOLE ACTIVE";
+            document.getElementById('admin-status').style.opacity = 1;
+            document.querySelectorAll('.skin-btn.admin-only').forEach(el => { el.classList.remove('locked'); el.classList.add('unlocked'); });
+            adminInput.value = "";
+            adminInput.blur();
+        }
+    });
+
+    function setSkin(skin) {
+        if (['neon', 'void', 'glitch', 'matrix', 'nebula', 'supernova', 'dev'].includes(skin) && !adminUnlocked) return;
+        currentSkin = skin;
+        document.querySelectorAll('.skin-btn').forEach(b => b.classList.remove('active'));
+        const targetBtn = document.getElementById('skin-' + skin);
+        if (targetBtn) targetBtn.classList.add('active');
+    }
+
+    function startGame() { generateLevel(); restartLevel(); document.getElementById('home-screen').style.display = 'none'; }
+    function restartLevel() { document.getElementById('overlay').style.display = 'none'; document.getElementById('win-screen').style.display = 'none'; player.x = 100; player.y = platforms[0].y - 200; player.vx = 0; player.vy = 0; player.grounded = false; player.trail = []; clones = []; trampolines = []; cameraX = 0; gameState = 'playing'; }
+
+    const SPRITE_IDLE = ["    HHHHH    ", "   HHHHHHH   ", "   HSSSSSWH  ", "   SSSSSSS   ", "   SSSSSSS   ", "    SSSSS    ", "   JJWWJJJ   ", "  JJJWWJJJJ  ", " JJJJWWJJJJJ ", " JJJJJJJJJJJ ", "  JJJJJJJJJ  ", "   PPPPPPP   ", "   PPPPPPP   ", "   PPPPPPP   ", "   PPPPPPP   ", "   BB   BB   "];
+    const SPRITE_RUN = ["    HHHHH    ", "   HHHHHHH   ", "   HSSSSSWH  ", "   SSSSSSS   ", "   SSSSSSS   ", "    SSSSS    ", "    JJWWJJ   ", "   JJJWWJJJ  ", "  JJJJWWJJJ  ", "  JJJJJJJJ   ", "   PPPPPP    ", "   PPPPPP    ", "  PPPP       ", "  PP         ", " BBB         ", " BBBB        "];
+
+    function drawSprite(data, x, y, width, height, flip, alpha = 1, skinOverride = null) {
+        const pSizeW = width / 13; const pSizeH = height / 16;
+        let pal = skins[skinOverride || currentSkin];
+        ctx.globalAlpha = alpha;
+        if (adminUnlocked && document.getElementById('admin-invis').checked && !skinOverride) { ctx.globalAlpha = alpha * 0.15; }
+        data.forEach((row, rIdx) => {
+            for (let cIdx = 0; cIdx < row.length; cIdx++) {
+                let char = row[cIdx];
+                let color = char === 'H' ? pal.H : char === 'S' ? pal.S : char === 'W' ? pal.W : char === 'J' ? pal.J : char === 'P' ? pal.P : char === 'B' ? "#000" : null;
+                if (color) {
+                    ctx.fillStyle = color;
+                    if ((currentSkin === 'glitch' || skinOverride === 'glitch') && Math.random() > 0.95) ctx.fillStyle = "#fff";
+                    let dx = flip ? x + width - (cIdx * pSizeW) : x + (cIdx * pSizeW);
+                    let dy = y + (rIdx * pSizeH);
+                    ctx.fillRect(dx, dy, pSizeW, pSizeH);
+                }
+            }
+        });
+        ctx.globalAlpha = 1;
+    }
+
+    window.addEventListener('keydown', e => { 
+        keys[e.code] = true; 
+        if (e.code === 'KeyF' && adminUnlocked && document.activeElement !== adminInput && document.activeElement !== document.getElementById('announcement-input')) { 
+            adminPanel.style.display = adminPanel.style.display === 'none' ? 'block' : 'none'; 
+        } 
+    });
+    window.addEventListener('keyup', e => {
+        keys[e.code] = false;
+        if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') player.jumpDebounce = false;
+    });
+
+    function update() {
+        if (gameState !== 'playing') return;
+        const scale = adminUnlocked ? parseFloat(document.getElementById('admin-player-scale').value) : 1;
+        player.width = BASE_WIDTH * scale; player.height = BASE_HEIGHT * scale;
+        const isFrozen = adminUnlocked && document.getElementById('admin-freeze').checked;
+        const isGhost = adminUnlocked && document.getElementById('admin-ghost').checked;
+        const canFly = adminUnlocked && document.getElementById('admin-fly').checked;
+        const midAirJump = adminUnlocked && document.getElementById('admin-mid-jump').checked;
+        const showTrail = adminUnlocked && document.getElementById('admin-trail').checked;
+        const lowGrav = adminUnlocked && document.getElementById('admin-low-grav').checked;
+        
+        let moveSpeed = DEFAULT_SPEED;
+        let jumpPower = DEFAULT_JUMP;
+
+        if (adminUnlocked) {
+            moveSpeed = parseInt(document.getElementById('admin-speed-slider').value) / 4;
+            jumpPower = parseInt(document.getElementById('admin-jump-slider').value);
+        } else if (boostActive) {
+            moveSpeed = 22.5; 
+            jumpPower = 30;   
+        }
+
+        let gravityVal = lowGrav ? BASE_GRAVITY * 0.3 : BASE_GRAVITY;
+
+        if (keys['KeyD'] || keys['ArrowRight']) { player.vx = moveSpeed; player.facingRight = true; player.animFrame += 0.25; } 
+        else if (keys['KeyA'] || keys['ArrowLeft']) { player.vx = -moveSpeed; player.facingRight = false; player.animFrame += 0.25; } 
+        else { player.vx *= 0.8; player.animFrame = 0; }
+
+        if (canFly) { 
+            if (keys['Space'] || keys['ArrowUp'] || keys['KeyW']) player.vy = -12; 
+            else if (keys['ArrowDown'] || keys['KeyS']) player.vy = 12; 
+            else player.vy *= 0.85; 
+            player.grounded = false; 
+        } 
+        else if (!isFrozen) { 
+            if (keys['Space'] || keys['ArrowUp'] || keys['KeyW']) {
+                if (player.grounded) {
+                    player.vy = -jumpPower;
+                    player.grounded = false;
+                    player.jumpDebounce = true;
+                } else if (midAirJump && !player.jumpDebounce) {
+                    player.vy = -jumpPower;
+                    player.jumpDebounce = true;
+                }
+            }
+            player.vy += gravityVal; 
+        }
+
+        player.x += player.vx; if (!isFrozen) player.y += player.vy;
+        if (showTrail) { player.trail.unshift({x: player.x, y: player.y, flip: !player.facingRight, w: player.width, h: player.height}); if (player.trail.length > 8) player.trail.pop(); } 
+        else { player.trail = []; }
+
+        trampolines.forEach(t => { if (player.x < t.x + t.w && player.x + player.width > t.x && player.y + player.height > t.y && player.y + player.height < t.y + t.h + 20) { if (player.vy > 0) { player.vy = -t.force; player.grounded = false; } } });
+        if (!isGhost) { 
+            player.grounded = false; 
+            platforms.forEach(p => { 
+                if (player.x < p.x + p.w && player.x + player.width > p.x && player.y < p.y + p.h && player.y + player.height > p.y) { 
+                    if (player.vy >= 0 && (player.y + player.height - player.vy) <= (p.y + 15)) { 
+                        player.y = p.y - player.height; 
+                        player.vy = 0; 
+                        player.grounded = true; 
+                    } 
+                } 
+            }); 
+        }
+
+        clones.forEach(c => { if (!isFrozen) { c.vy += gravityVal; c.y += c.vy; platforms.forEach(p => { if (c.x < p.x + p.w && c.x + c.width > p.x && c.y < p.y + p.h && c.y + c.height > p.y) { if (c.vy >= 0 && (c.y + c.height - c.vy) <= (p.y + 15)) { c.y = p.y - c.height; c.vy = 0; } } }); } });
+        cameraX += (player.x - (canvas.width * 0.35) - cameraX) * 0.1;
+        cameraX = Math.max(0, Math.min(cameraX, WORLD_WIDTH - canvas.width));
+        
+        if (player.y > canvas.height + 500) { 
+            if (adminUnlocked && document.getElementById('admin-god').checked) { 
+                player.y = -200; player.vy = 0; 
+            } else { 
+                gameState = 'over'; 
+                document.getElementById('overlay').style.display = 'flex'; 
+                if (score > highScore) { highScore = score; localStorage.setItem('rickrun_highscore', highScore); highScoreEl.innerText = highScore.toString().padStart(6, '0'); } 
+            } 
+        }
+        if (player.x > flag.x) { gameState = 'win'; document.getElementById('win-screen').style.display = 'flex'; }
+        score = Math.floor(player.x / 10); scoreEl.innerText = score.toString().padStart(6, '0');
+    }
+
+    function draw() {
+        const isRainbow = adminUnlocked && document.getElementById('admin-rainbow').checked;
+        const hidePlats = adminUnlocked && document.getElementById('admin-hide-plats').checked;
+        
+        const skyColor = document.getElementById('admin-sky-color').value;
+        ctx.fillStyle = isRainbow ? `hsl(${(Date.now() / 20) % 360}, 60%, 40%)` : skyColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        for(let i=0; i<15; i++) { let cx = (i * 2000 - cameraX * 0.3) % WORLD_WIDTH; ctx.fillRect(cx, 150 + i * 40, 300, 80); }
+        
+        trampolines.forEach(t => { ctx.fillStyle = '#222'; ctx.fillRect(t.x - cameraX, t.y, t.w, t.h); ctx.fillStyle = '#00ffcc'; ctx.fillRect(t.x - cameraX + 5, t.y + 2, t.w - 10, 4); });
+        
+        if (!hidePlats) { 
+            const floorColor = document.getElementById('admin-floor-color').value;
+            platforms.forEach(p => { 
+                if (p.x + p.w > cameraX && p.x < cameraX + canvas.width) { 
+                    ctx.fillStyle = '#6d4c41'; 
+                    ctx.fillRect(p.x - cameraX, p.y, p.w, p.h); 
+                    ctx.fillStyle = isRainbow ? `hsl(${(Date.now() / 10 + p.id * 20) % 360}, 70%, 50%)` : floorColor; 
+                    ctx.fillRect(p.x - cameraX, p.y, p.w, 15); 
+                    
+                    if (showIds) {
+                        ctx.fillStyle = "white";
+                        ctx.font = "bold 14px Segoe UI";
+                        ctx.textAlign = "center";
+                        ctx.fillText("ID: " + p.id, p.x - cameraX + (p.w / 2), p.y - 12);
+                    }
+                } 
+            }); 
+        }
+
+        ctx.fillStyle = '#f1c40f'; ctx.fillRect(flag.x - cameraX, flag.y, flag.w, flag.h);
+        player.trail.forEach((t, i) => drawSprite(SPRITE_RUN, t.x - cameraX, t.y, t.w, t.h, t.flip, 0.4 - (i * 0.05)));
+        clones.forEach(c => drawSprite(Math.abs(c.vx) > 0.1 ? SPRITE_RUN : SPRITE_IDLE, c.x - cameraX, c.y, c.width, c.height, !c.facingRight, 0.7, c.skin));
+        drawSprite(Math.abs(player.vx) > 0.1 ? SPRITE_RUN : SPRITE_IDLE, player.x - cameraX, player.y, player.width, player.height, !player.facingRight);
+    }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    loop();
+</script>
+</body>
+</html>
